@@ -1,12 +1,11 @@
+// server
 #include <stdio.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 #include <unistd.h>
 #include <string.h>
-#include <signal.h>
 
-#define MAX_CLIENTS 100
+#define MAX_CLIENTS 2
 #define BUFFER_SIZE 2048
 
 static _Atomic unsigned int client_count = 0;
@@ -22,8 +21,6 @@ typedef struct{
 
 client_t *clients[MAX_CLIENTS];
 
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 void print_client_addr(struct sockaddr_in addr){
     printf("%d.%d.%d.%d",
         addr.sin_addr.s_addr & 0xff,
@@ -34,22 +31,16 @@ void print_client_addr(struct sockaddr_in addr){
 
 // Add clients to queue
 void queue_add(client_t *cl){
-	pthread_mutex_lock(&clients_mutex);
-
 	for(int i = 0; i < MAX_CLIENTS; ++i){
 		if(!clients[i]){
 			clients[i] = cl;
 			break;
 		}
 	}
-
-	pthread_mutex_unlock(&clients_mutex);
 }
 
 // Send message to all clients except sender 
 void send_message(char *s, int uid){
-	pthread_mutex_lock(&clients_mutex);
-
 	for(int i = 0; i < MAX_CLIENTS; ++i){
 		if (clients[i]){
 			if(clients[i]->uid != uid){
@@ -60,8 +51,6 @@ void send_message(char *s, int uid){
 			}
 		}
 	}
-
-	pthread_mutex_unlock(&clients_mutex);
 }
 
 void str_trim_lf (char* arr, int length) {
@@ -76,8 +65,6 @@ void str_trim_lf (char* arr, int length) {
 
 // Remove clients to queue 
 void queue_remove(int uid){
-	pthread_mutex_lock(&clients_mutex);
-
 	for(int i = 0; i < MAX_CLIENTS; ++i){
 		if(clients[i]){
 			if(clients[i]->uid == uid){
@@ -86,8 +73,6 @@ void queue_remove(int uid){
 			}
 		}
 	}
-
-	pthread_mutex_unlock(&clients_mutex);
 }
 
 // Handle all communication with the client
@@ -143,7 +128,6 @@ void *handle_client(void *arg){
     queue_remove(client->uid);
     free(client);
     client_count--;
-    pthread_detach(pthread_self());
 
 	return NULL;
 }
@@ -212,8 +196,6 @@ int main(int argc, char** argv) {
 
         // Add client to the queue and fork thread
 		queue_add(client);
-        // Create new thread
-		pthread_create(&tid, NULL, &handle_client, (void*)client);
 
         // Reduce CPU usage
 		sleep(1);
